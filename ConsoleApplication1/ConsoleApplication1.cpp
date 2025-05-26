@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <numeric>
 using namespace std;
 //读入影像数据，输出影像长宽以及格式信息
 GDALDataset* Read_image(GDALDataset* pDatasetRead, char* filename);
@@ -19,6 +20,8 @@ vector<float> intensity(GDALDataset* pDatasetRead);
 vector<float> to_dB(vector<float> intensity, int width, int height);
 //0-255可视化
 vector<float> visible(vector<float> db, int width, int height);
+//多视
+vector<float> multi_view(vector<float> visible, int width, int height, int ground_look, int azimuth_look);
 
 int main()
 {
@@ -27,23 +30,53 @@ int main()
     GDALDataset* pDatasetSave;
     GDALDriver* pDriver;
     //char filename[200] = "data/imagery_HH.tif";
-    char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
-    pDatasetRead = Read_image(pDatasetRead, filename);
-    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
-    int width = pDatasetRead->GetRasterXSize();
-    int height = pDatasetRead->GetRasterYSize();
-    if (pDatasetRead == NULL) {
-        return 1;
-    }
-    //根据影像存储格式进行强度图计算
-    vector<float> qdArray = intensity(pDatasetRead);
-    if (qdArray.size()==0) {
-        return 1;
-    }
-    //转换成分贝
-    vector<float> dbArray = to_dB(qdArray, width, height);
-    //转换至0-255区间
-    vector<float> vArray = visible(dbArray, width, height);
+    //char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
+
+
+    char filename[200] = "data/visible.tif";
+    pDatasetRead = (GDALDataset*)GDALOpen(filename, GA_ReadOnly);
+    GDALRasterBand* band = pDatasetRead->GetRasterBand(1);
+    GDALDataType datatype = band->GetRasterDataType();
+    // 获取波段的宽度和高度
+    int xSize = band->GetXSize();
+    int ySize = band->GetYSize();
+    // 分配内存用于存储实部和虚部
+    vector<float> qdArray(xSize * ySize);
+    // 读取波段数据
+    CPLErr eErr = band->RasterIO(GF_Read, 0, 0, xSize, ySize, qdArray.data(), xSize, ySize, datatype, 0, 0);
+
+
+    //pDatasetRead = Read_image(pDatasetRead, filename);
+    //GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    //int width = pDatasetRead->GetRasterXSize();
+    //int height = pDatasetRead->GetRasterYSize();
+    //if (pDatasetRead == NULL) {
+    //    return 1;
+    //}
+    ////根据影像存储格式进行强度图计算
+    //vector<float> qdArray = intensity(pDatasetRead);
+    //if (qdArray.size()==0) {
+    //    return 1;
+    //}
+    ////转换成分贝
+    //vector<float> dbArray = to_dB(qdArray, width, height);
+    ////转换至0-255区间
+    //vector<float> vArray = visible(dbArray, width, height);
+    //多视
+    //terrasar-x的参数
+    float range_resolution = 2.27785611941735544;
+    float azimuth_resolution = 3.29999995231628418;
+    float angle = 31.1733936943751999;
+    int ground_look = 4;
+    int azimuth_look = 3;
+    //radasat的参数
+    //float range_resolution = 2.27785611941735544;
+    //float azimuth_resolution = 3.29999995231628418;
+    //float angle = 3.11733936943751999;
+    cout << "距离向视数：" << ground_look << endl;
+    cout << "方位向视数：" << azimuth_look << endl;
+    vector<float> mvArray = multi_view(qdArray, xSize, ySize, ground_look, azimuth_look);
+    //vector<float> mvArray = multi_view(vArray, width, height, ground_look, azimuth_look);
 
    
     //释放内存和关闭数据集
@@ -204,6 +237,50 @@ vector<float> visible(vector<float> db, int width, int height) {
         cout << "v-tif写入失败" << endl;
     }
     return vArray;
+}
+vector<float> multi_view(vector<float> visible, int width, int height, int ground_look, int azimuth_look){
+    vector<float> err(visible.size());
+    //定义多视图大小
+    int mv_width = width / ground_look;
+    int mv_height = height / azimuth_look;
+    vector<float> mvArray(mv_width * mv_height);
+    vector<float> mvArray_w(mv_width * height);//距离向抽稀半成品
+
+    //距离向抽稀
+    for(int i =0;i<height;i++){
+		for(int j =0;j<mv_width;j++){
+            //求平均
+            float sum = 0;
+            for (int m = 0; m < ground_look; m++) {
+                sum += visible[i * width + ground_look * j + m];
+            }
+            mvArray_w[i * mv_width + j] = sum / ground_look;
+		}
+	}
+    //方位向抽稀
+    for (int i = 0; i < mv_width; i++) {
+        for (int j = 0; j < mv_height; j++) {
+            float sum = 0;
+            for (int m = 0; m < azimuth_look; m++) {
+                sum += mvArray_w[(azimuth_look * j + m) * mv_width + i];
+            }
+            mvArray[i + j * mv_width] = sum / azimuth_look;
+        }
+    }
+    //存成tif影像
+	//获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/multi.tif", mv_width, mv_height, 1, GDT_Float32, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "multi-输出路径创建失败" << endl;
+        return mvArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, mv_width, mv_height, mvArray.data(), mv_width, mv_height, GDT_Float32, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "multi-tif写入失败" << endl;
+    }
+    return mvArray;
 }
 
 
