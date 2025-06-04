@@ -25,7 +25,7 @@ vector<float> multi_view(vector<float> visible, int width, int height, int groun
 //均值滤波
 vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal);
 //中值滤波
-vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal);
+vector<unsigned char> medianFilter(GDALDataset* pDatasetRead, int kernal);
 
 int main()
 {
@@ -34,49 +34,34 @@ int main()
     GDALDataset* pDatasetSave;
     GDALDriver* pDriver;
     //char filename[200] = "data/imagery_HH.tif";
-    //char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
 
-
-    char filename[200] = "data/nt.tif";
-
-    pDatasetRead = Read_image(pDatasetRead, filename);
-    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
-    int width = pDatasetRead->GetRasterXSize();
-    int height = pDatasetRead->GetRasterYSize();
+    // 影像预处理
+    char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
+    pDatasetRead = Read_image(pDatasetRead, filename); //读取COSAR影像
     if (pDatasetRead == NULL) {
         return 1;
     }
-    ////根据影像存储格式进行强度图计算
-    //vector<float> qdArray = intensity(pDatasetRead);
-    //if (qdArray.size()==0) {
-    //    return 1;
-    //}
-    ////转换成分贝
-    //vector<float> dbArray = to_dB(qdArray, width, height);
-    ////转换至0-255区间
-    //vector<float> vArray = visible(dbArray, width, height);
-    //多视
-    //terrasar-x的参数
-    //float range_resolution = 2.27785611941735544;
-    //float azimuth_resolution = 3.29999995231628418;
-    //float angle = 31.1733936943751999;
-    //radasat的参数
-    //float range_resolution = 2.27785611941735544;
-    //float azimuth_resolution = 3.29999995231628418;
-    //float angle = 3.11733936943751999;
-    //int ground_look = 4;
-    //int azimuth_look = 3;
-    //cout << "距离向视数：" << ground_look << endl;
-    //cout << "方位向视数：" << azimuth_look << endl;
-    //vector<float> mvArray = multi_view(qdArray, xSize, ySize, ground_look, azimuth_look);
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    vector<float> qdArray = intensity(pDatasetRead);// 计算强度图
+    if (qdArray.size()==0) {
+        return 1;
+    }
+    vector<float> dbArray = to_dB(qdArray, width, height);    // 计算分贝
+    vector<float> vArray = visible(dbArray, width, height); // 线性变换至0-255区间
+    int ground_look = 3; //距离向视数
+    int azimuth_look = 2; //方位向视数
+    vector<float> mvArray = multi_view(qdArray, width, height, ground_look, azimuth_look); //多视处理
 
-    //滤波
-    vector<unsigned char> Filter_img = meanFilter(pDatasetRead, 3);
+    // 由于原始影像太大，使用ENVI软件裁剪多视结果，对裁剪后的影像进行滤波处理
+    //vector<unsigned char> Filter_img = meanFilter(pDatasetRead, 3);
+    //vector<unsigned char> Filter_img = medianFilter(pDatasetRead, 3);
 
     
    
     //释放内存和关闭数据集
-    Filter_img.clear();
+    //Filter_img.clear();
     GDALClose(pDatasetRead);
 
 }
@@ -132,12 +117,17 @@ vector<float> intensity(GDALDataset* pDatasetRead) {
         //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
         GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
         char** papszOptions = pDriver->GetMetadata();
-        GDALDataset* pDatasetSave = pDriver->Create("data/terrasar-x_intesnsity.tif", xSize, ySize, 1, GDT_Float32, papszOptions);
+        GDALDataset* pDatasetSave = pDriver->Create("data/intensity.tif", xSize, ySize, 1, GDT_Float32, papszOptions);
         if (pDatasetSave == NULL) {
             cout << "输出路径创建失败"<<endl;
             GDALClose(pDatasetRead);
             return err;
         }
+        // 将原影像的投影信息和地理变换参数复制到新影像
+        pDatasetSave->SetProjection(pDatasetRead->GetProjectionRef());
+        double adfGeoTransform[6];
+        pDatasetRead->GetGeoTransform(adfGeoTransform);
+        pDatasetSave->SetGeoTransform(adfGeoTransform);
         //将图像数据写入到新的数据集中
         if (pDatasetSave->RasterIO(GF_Write, 0, 0, xSize, ySize, qdArray.data(), xSize, ySize, GDT_Float32, 1, NULL, 0, 0, 0) != CE_None) {
             cout<<"tif写入失败"<<endl;
@@ -178,6 +168,11 @@ vector<float> intensity(GDALDataset* pDatasetRead) {
             GDALClose(pDatasetRead);
             return err;
         }
+        // 将原影像的投影信息和地理变换参数复制到新影像
+        pDatasetSave->SetProjection(pDatasetRead->GetProjectionRef());
+        double adfGeoTransform[6];
+        pDatasetRead->GetGeoTransform(adfGeoTransform);
+        pDatasetSave->SetGeoTransform(adfGeoTransform);
         //将图像数据写入到新的数据集中
         if (pDatasetSave->RasterIO(GF_Write, 0, 0, lWidth, lHeight, qdArray.data(), lWidth, lHeight, GDT_Float32, 1, NULL, 0, 0, 0) != CE_None) {
             cout << "tif写入失败" << endl;
@@ -289,17 +284,12 @@ vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal) {
     // 读取波段数据
     CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, qdArray.data(), width, height, datatype, 0, 0);
     // 给影像最外层赋值
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            // 如果像素位于滤波窗口之外，则保持原值不变
-            if (i <= (kernal - 1) / 2 - 1 || j <= (kernal - 1) / 2 - 1 ||
-                i >= width - (kernal - 1) / 2 || j >= height - (kernal - 1) / 2) {
-                unsigned char dn = qdArray[i * width + j];
-                filterArray[i * width + j] = dn;
-            }
-        }
-    }
-    // 初始化临时数组和一些变量
+    // 影像边缘不做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernal) || (j >= 0 && j <= kernal) || (i <= height - 1 && i >= height - 1 - kernal) || (j <= width - 1 && j >= width - 1 - kernal))
+                filterArray[i * width + j] = qdArray[i * width + j];
+    // 初始化临时数组
     int num = kernal * kernal; int* temp = new int[num];
     // 对图像中间部分进行均值滤波处理
     for (int i = (kernal - 1) / 2; i < height - (kernal - 1) / 2; i++) {
@@ -332,11 +322,59 @@ vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal) {
     }
     //将图像数据写入到新的数据集中
     if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
-        cout << "multi-tif写入失败" << endl;
+        cout << "filter写入失败" << endl;
     }
     return filterArray;
 }
 vector<unsigned char> medianFilter(GDALDataset* pDatasetRead, int kernal) {
+    GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    vector<unsigned char> qdArray(width * height);
+    int* tmp = new int[kernal * kernal];
+    vector<unsigned char> filterArray(width * height);
+    // 读取波段数据
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, qdArray.data(), width, height, datatype, 0, 0);
+    // 影像边缘不做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernal) || (j >= 0 && j <= kernal) || (i <= height - 1 && i >= height - 1 - kernal) || (j <= width - 1 && j >= width - 1 - kernal))
+                filterArray[i * width + j] = qdArray[i * width + j];
+    //四重循环，循环影像XY和窗口XY
+    for (int i = kernal + 1; i < height - 1 - kernal; i++)
+    {
+        for (int j = kernal + 1; j < width - 1 - kernal; j++)
+        {
+            //循环窗口内每个像元
+            int index = 0;
+            for (int x = -kernal; x <= kernal; x++)
+            {
+                for (int y = -kernal; y <= kernal; y++)
+                {
+                    tmp[index] = ((int)qdArray[(i + y) * width + j + x]);
+                    index++;
+                }
+            }
+            //灰度赋值
+            std::sort(tmp, tmp + index);//排序
+            filterArray[i * width + j] = (unsigned char)tmp[(index + 1) / 2 - 1];//赋中间值给窗口中心
+        }
+    }
+    //存成tif影像
+   //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-median.tif", width, height, 1, GDT_Byte, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "Filtered-输出路径创建失败" << endl;
+        return filterArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "filter写入失败" << endl;
+    }
+    return filterArray;
 
 }
 
