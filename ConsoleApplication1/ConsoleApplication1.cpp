@@ -23,9 +23,20 @@ vector<float> visible(vector<float> db, int width, int height);
 //多视
 vector<float> multi_view(vector<float> visible, int width, int height, int ground_look, int azimuth_look);
 //均值滤波
-vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal);
-//中值滤波
-vector<unsigned char> medianFilter(GDALDataset* pDatasetRead, int kernal);
+vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+//Lee滤波
+vector<unsigned char> LeeFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+//增强Lee滤波
+vector<unsigned char> Ad_LeeFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+//Kuan滤波
+vector<unsigned char> KuanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+//增强Kuan滤波
+vector<unsigned char> AdKuanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+//Frost滤波
+vector<unsigned char> FrostFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+//增强Frost滤波
+vector<unsigned char> AdFrostFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly);
+
 
 int main()
 {
@@ -35,28 +46,36 @@ int main()
     GDALDriver* pDriver;
     //char filename[200] = "data/imagery_HH.tif";
 
-    // 影像预处理
-    char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
-    pDatasetRead = Read_image(pDatasetRead, filename); //读取COSAR影像
-    if (pDatasetRead == NULL) {
-        return 1;
-    }
-    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
-    int width = pDatasetRead->GetRasterXSize();
-    int height = pDatasetRead->GetRasterYSize();
-    vector<float> qdArray = intensity(pDatasetRead);// 计算强度图
-    if (qdArray.size()==0) {
-        return 1;
-    }
-    vector<float> dbArray = to_dB(qdArray, width, height);    // 计算分贝
-    vector<float> vArray = visible(dbArray, width, height); // 线性变换至0-255区间
-    int ground_look = 3; //距离向视数
-    int azimuth_look = 2; //方位向视数
-    vector<float> mvArray = multi_view(qdArray, width, height, ground_look, azimuth_look); //多视处理
+    //// 影像预处理
+    //char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
+    //pDatasetRead = Read_image(pDatasetRead, filename); //读取COSAR影像
+    //if (pDatasetRead == NULL) {
+    //    return 1;
+    //}
+    //GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    //int width = pDatasetRead->GetRasterXSize();
+    //int height = pDatasetRead->GetRasterYSize();
+    //vector<float> qdArray = intensity(pDatasetRead);// 计算强度图
+    //if (qdArray.size()==0) {
+    //    return 1;
+    //}
+    //vector<float> dbArray = to_dB(qdArray, width, height);    // 计算分贝
+    //vector<float> vArray = visible(dbArray, width, height); // 线性变换至0-255区间
+    //int ground_look = 3; //距离向视数
+    //int azimuth_look = 2; //方位向视数
+    //vector<float> mvArray = multi_view(qdArray, width, height, ground_look, azimuth_look); //多视处理
 
     // 由于原始影像太大，使用ENVI软件裁剪多视结果，对裁剪后的影像进行滤波处理
-    //vector<unsigned char> Filter_img = meanFilter(pDatasetRead, 3);
-    //vector<unsigned char> Filter_img = medianFilter(pDatasetRead, 3);
+    char filename0[200] = "data/zhibei.tif"; // 待处理影像
+    pDatasetRead = Read_image(pDatasetRead, filename0); //读取影像
+    //vector<unsigned char> Filter_img_mean = meanFilter(pDatasetRead, 7, 5);//均值滤波
+    //vector<unsigned char> Filter_img_Lee = LeeFilter(pDatasetRead, 7, 5);//Lee滤波
+    //vector<unsigned char> Filter_img_AdLee = Ad_LeeFilter(pDatasetRead, 7, 5);//增强Lee滤波
+    //vector<unsigned char> Filter_img_Kuan = KuanFilter(pDatasetRead, 7, 5);//Kuan滤波
+    //vector<unsigned char> Filter_img_Kuan = AdKuanFilter(pDatasetRead, 7, 5);//Kuan滤波
+    //vector<unsigned char> Filter_img_Frost = FrostFilter(pDatasetRead, 7, 5);//Frost滤波
+    vector<unsigned char> Filter_img_Frost = AdFrostFilter(pDatasetRead, 5, 5);//Frost滤波
+
 
     
    
@@ -274,7 +293,7 @@ vector<float> multi_view(vector<float> visible, int width, int height, int groun
     }
     return mvArray;
 }
-vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal) {
+vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly) {
     GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
     int width = pDatasetRead->GetRasterXSize();
     int height = pDatasetRead->GetRasterYSize();
@@ -287,19 +306,20 @@ vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal) {
     // 影像边缘不做处理
     for (int i = 0; i < height; i++)
         for (int j = 0; j < width; j++)
-            if ((i >= 0 && i <= kernal) || (j >= 0 && j <= kernal) || (i <= height - 1 && i >= height - 1 - kernal) || (j <= width - 1 && j >= width - 1 - kernal))
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
                 filterArray[i * width + j] = qdArray[i * width + j];
     // 初始化临时数组
-    int num = kernal * kernal; int* temp = new int[num];
+    int num = kernalx * kernaly; 
+    int* temp = new int[num];
     // 对图像中间部分进行均值滤波处理
-    for (int i = (kernal - 1) / 2; i < height - (kernal - 1) / 2; i++) {
-        for (int j = (kernal - 1) / 2; j < width - (kernal - 1) / 2; j++) {
-            int media_x = (kernal + 1) / 2;
-            int media_y = (kernal + 1) / 2;
+    for (int i = (kernaly - 1) / 2; i < height - (kernaly - 1) / 2; i++) {
+        for (int j = (kernalx - 1) / 2; j < width - (kernalx - 1) / 2; j++) {
+            int media_x = (kernalx + 1) / 2;
+            int media_y = (kernaly + 1) / 2;
             // 将滤波窗口内的像素值存储到临时数组temp中
-            for (int m = 1; m <= kernal; m++) {
-                for (int n = 1; n <= kernal; n++) {
-                    int index = (n - 1) * kernal + m - 1;
+            for (int m = 1; m <= kernalx; m++) {
+                for (int n = 1; n <= kernaly; n++) {
+                    int index = (n - 1) * kernalx + m - 1;
                     temp[index] = (int)qdArray[(i - (media_y - n)) * width + j - (media_x - m)];
                 }
             }
@@ -326,46 +346,59 @@ vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernal) {
     }
     return filterArray;
 }
-vector<unsigned char> medianFilter(GDALDataset* pDatasetRead, int kernal) {
+vector<unsigned char> LeeFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
+{
     GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
     int width = pDatasetRead->GetRasterXSize();
     int height = pDatasetRead->GetRasterYSize();
     GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
-    vector<unsigned char> qdArray(width * height);
-    int* tmp = new int[kernal * kernal];
-    vector<unsigned char> filterArray(width * height);
-    // 读取波段数据
-    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, qdArray.data(), width, height, datatype, 0, 0);
-    // 影像边缘不做处理
+    vector<unsigned char> imgArray(width * height);//输入影像
+    vector<unsigned char> filterArray(width * height);//输出影像
+    vector<unsigned char> window(kernalx * kernaly); //滤波窗口
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, imgArray.data(), width, height, datatype, 0, 0);//读入影像
+    int kernalx0 = (kernalx - 1) / 2; //窗口大小
+    int kernaly0 = (kernaly - 1)/2; 
+    // 影像边缘做处理
     for (int i = 0; i < height; i++)
         for (int j = 0; j < width; j++)
-            if ((i >= 0 && i <= kernal) || (j >= 0 && j <= kernal) || (i <= height - 1 && i >= height - 1 - kernal) || (j <= width - 1 && j >= width - 1 - kernal))
-                filterArray[i * width + j] = qdArray[i * width + j];
+            if ((i >= 0 && i <= kernaly0) || (j >= 0 && j <= kernalx0) || (i <= height - 1 && i >= height - 1 - kernaly0) || (j <= width - 1 && j >= width - 1 - kernalx0))
+                filterArray[i * width + j] = imgArray[i * width + j];
     //四重循环，循环影像XY和窗口XY
-    for (int i = kernal + 1; i < height - 1 - kernal; i++)
+    for (int i = kernaly0 + 1; i < height - 1 - kernaly0; i++)
     {
-        for (int j = kernal + 1; j < width - 1 - kernal; j++)
+        for (int j = kernalx0 + 1; j < width - 1 - kernalx0; j++)
         {
             //循环窗口内每个像元
-            int index = 0;
-            for (int x = -kernal; x <= kernal; x++)
+            int count = 0;
+            for (int x = -kernalx0; x <= kernalx0; x++)
             {
-                for (int y = -kernal; y <= kernal; y++)
+                for (int y = -kernaly0; y <= kernaly0; y++)
                 {
-                    tmp[index] = ((int)qdArray[(i + y) * width + j + x]);
-                    index++;
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    count++;
                 }
             }
+            //计算有关系数
+            double sum = 0; 
+            for (int i = 0; i < count; i++) sum += window[i];
+            double mean = sum / count;//计算均值
+            double S = 0; 
+            for (int i = 0; i < count; i++) S += (window[i] - mean) * (window[i] - mean);
+            double SS = S / count;//计算方差
+            double C_u = 0.5227;//计算C_u，经过多视处理后视数为1
+            double C_I = sqrt(SS) / mean;//计算C_I
+            double w = 1 - (C_u * C_u) / (C_I * C_I);//计算w
             //灰度赋值
-            std::sort(tmp, tmp + index);//排序
-            filterArray[i * width + j] = (unsigned char)tmp[(index + 1) / 2 - 1];//赋中间值给窗口中心
+            double g = mean * w + imgArray[i * width + j] * (1 - w);//计算灰度值
+            if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
+            filterArray[i * width + j] = (int)g;//赋值给窗口中心
         }
     }
     //存成tif影像
    //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
     GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
     char** papszOptions = pDriver->GetMetadata();
-    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-median.tif", width, height, 1, GDT_Byte, papszOptions);
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-Lee.tif", width, height, 1, GDT_Byte, papszOptions);
     if (pDatasetSave == NULL) {
         cout << "Filtered-输出路径创建失败" << endl;
         return filterArray;
@@ -375,7 +408,368 @@ vector<unsigned char> medianFilter(GDALDataset* pDatasetRead, int kernal) {
         cout << "filter写入失败" << endl;
     }
     return filterArray;
-
 }
+vector<unsigned char> Ad_LeeFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
+{
+    GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    vector<unsigned char> imgArray(width * height);//输入影像
+    vector<unsigned char> filterArray(width * height);//输出影像
+    vector<unsigned char> window(kernalx * kernaly); //滤波窗口
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, imgArray.data(), width, height, datatype, 0, 0);//读入影像
+    kernalx = (kernalx - 1) / 2; //窗口大小
+    kernaly = (kernaly - 1) / 2; //窗口大小
+    // 影像边缘做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
+                filterArray[i * width + j] = imgArray[i * width + j];
+    //四重循环，循环影像XY和窗口XY
+    for (int i = kernaly + 1; i < height - 1 - kernaly; i++)
+    {
+        for (int j = kernalx + 1; j < width - 1 - kernalx; j++)
+        {
+            //循环窗口内每个像元
+            int count = 0;
+            for (int x = -kernalx; x <= kernalx; x++)
+            {
+                for (int y = -kernaly; y <= kernaly; y++)
+                {
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    count++;
+                }
+            }
+            //计算有关系数
+            double sum = 0; for (int i = 0; i < count; i++) sum += window[i];
+            double mean = sum / count;//计算均值
+            double sum2 = 0; for (int i = 0; i < count; i++) sum2 += (window[i] - mean) * (window[i] - mean);
+            double variance = sum2 / count;//计算方差
+            double C_u = 0.5227;//计算C_u，经过多视处理后视数为1
+            double C_max = sqrt(3) * C_u;//计算C_max
+            double C_I = sqrt(variance) / mean;//计算C_I
+            double w = 1 - (C_u * C_u) / (C_I * C_I);//计算w
+            //阈值判断
+            double g = 0;
+            if (C_I < C_u) g = mean;
+            else if (C_I >= C_u && C_I <= C_max) g = mean * w + window[(count + 1) / 2 - 1] * (1 - w);
+            else g = window[(count + 1) / 2 - 1];
+            //灰度赋值
+            if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
+            double a = imgArray[i * width + j];
+            filterArray[i * width + j] = g;//赋值给窗口中心
+        }
+    }
+    //存成tif影像
+   //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-AdLee.tif", width, height, 1, GDT_Byte, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "Filtered-输出路径创建失败" << endl;
+        return filterArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "filter写入失败" << endl;
+    }
+    return filterArray;
+    
+}
+vector<unsigned char> KuanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
+{
+    GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    vector<unsigned char> imgArray(width * height);//输入影像
+    vector<unsigned char> filterArray(width * height);//输出影像
+    vector<unsigned char> window(kernalx * kernaly); //滤波窗口
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, imgArray.data(), width, height, datatype, 0, 0);//读入影像
+    kernalx = (kernalx - 1) / 2; //窗口大小
+    kernaly = (kernaly - 1) / 2; //窗口大小
+    // 影像边缘做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
+                filterArray[i * width + j] = imgArray[i * width + j];
+    //四重循环，循环影像XY和窗口XY
+    for (int i = kernaly + 1; i < height - 1 - kernaly; i++)
+    {
+        for (int j = kernalx + 1; j < width - 1 - kernalx; j++)
+        {
+            //循环窗口内每个像元
+            int count = 0;
+            for (int x = -kernalx; x <= kernalx; x++)
+            {
+                for (int y = -kernaly; y <= kernaly; y++)
+                {
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    count++;
+                }
+            }
+            //计算有关系数
+            double sum = 0; for (int i = 0; i < count; i++) sum += window[i];
+            double mean = sum / count;//计算均值
+            double sum2 = 0; for (int i = 0; i < count; i++) sum2 += (window[i] - mean) * (window[i] - mean);
+            double variance = sum2 / count;//计算方差
+            double C_u = 1 /sqrt(3);//计算C_u
+            double C_I = sqrt(variance) / mean;//计算C_I
+            double w = (1 - (C_u * C_u) / (C_I * C_I)) / (1 + C_u * C_u);//计算w
+            //灰度赋值
+            double g = mean * w + window[(count + 1) / 2 - 1] * (1 - w);//计算灰度值
+            if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
+            filterArray[i * width + j] = (int)g;//赋值给窗口中心
+            //int m = i * width + j;
+            //double no = (double)filterArray[m] - (double)imgArray[m];
+            //derta = derta + no * no;
+        }
 
+    }
+    //存成tif影像
+   //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-Kuan.tif", width, height, 1, GDT_Byte, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "Filtered-输出路径创建失败" << endl;
+        return filterArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "filter写入失败" << endl;
+    }
+    return filterArray;
+}
+vector<unsigned char> AdKuanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
+{
+    int look = 1; //视数
+    GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    vector<unsigned char> imgArray(width * height);//输入影像
+    vector<unsigned char> filterArray(width * height);//输出影像
+    vector<unsigned char> window(kernalx * kernaly); //滤波窗口
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, imgArray.data(), width, height, datatype, 0, 0);//读入影像
+    kernalx = (kernalx - 1) / 2; //窗口大小
+    kernaly = (kernaly - 1) / 2; //窗口大小
+    // 影像边缘做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
+                filterArray[i * width + j] = imgArray[i * width + j];
+    //四重循环，循环影像XY和窗口XY
+    for (int i = kernaly + 1; i < height - 1 - kernaly; i++)
+    {
+        for (int j = kernalx + 1; j < width - 1 - kernalx; j++)
+        {
+            //循环窗口内每个像元
+            int count = 0;
+            for (int x = -kernalx; x <= kernalx; x++)
+            {
+                for (int y = -kernaly; y <= kernaly; y++)
+                {
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    count++;
+                }
+            }
+            //计算有关系数
+            double sum = 0; for (int i = 0; i < count; i++) sum += window[i];
+            double mean = sum / count;//计算均值
+            double sum2 = 0; for (int i = 0; i < count; i++) sum2 += (window[i] - mean) * (window[i] - mean);
+            double variance = sum2 / count;//计算方差
+            double C_u = 1 / sqrt(look);//计算C_u
+            double C_I = sqrt(variance) / mean;//计算C_I
+            double w = (1 - (C_u * C_u) / (C_I * C_I)) / (1 + C_u * C_u);//计算w
+            double C_max = sqrt(1 + 2 / look);//计算C_max
+            //阈值判断
+            double g = 0;
+            if (C_I < C_u) 
+                g = mean;
+            else if (C_I >= C_u && C_I <= C_max) 
+                g = mean * w + window[(count + 1) / 2 - 1] * (1 - w);
+            else 
+                g = window[(count + 1) / 2 - 1];
+            //灰度赋值
+            if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
+            filterArray[i * width + j] = (int)g;//赋值给窗口中心
+        }
+
+    }
+    //存成tif影像
+   //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-AdKuan.tif", width, height, 1, GDT_Byte, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "Filtered-输出路径创建失败" << endl;
+        return filterArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "filter写入失败" << endl;
+    }
+    return filterArray;
+}
+vector<unsigned char> FrostFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
+{
+    int look = 1; //视数
+    GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    vector<unsigned char> imgArray(width * height);//输入影像
+    vector<unsigned char> filterArray(width * height);//输出影像
+    vector<unsigned char> window(kernalx * kernaly); //滤波窗口
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, imgArray.data(), width, height, datatype, 0, 0);//读入影像
+    kernalx = (kernalx - 1) / 2; //窗口大小
+    kernaly = (kernaly - 1) / 2; //窗口大小
+    // 影像边缘做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
+                filterArray[i * width + j] = imgArray[i * width + j];
+    //四重循环，循环影像XY和窗口XY
+    for (int i = kernaly + 1; i < height - 1 - kernaly; i++)
+    {
+        for (int j = kernalx + 1; j < width - 1 - kernalx; j++)
+        {
+            //循环窗口内每个像元
+            int count = 0;
+            for (int x = -kernalx; x <= kernalx; x++)
+            {
+                for (int y = -kernaly; y <= kernaly; y++)
+                {
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    count++;
+                }
+            }
+            //计算有关系数
+            double sum = 0; for (int i = 0; i < count; i++) sum += window[i];
+            double mean = sum / count;//计算均值
+            double sum2 = 0; for (int i = 0; i < count; i++) sum2 += (window[i] - mean) * (window[i] - mean);
+            double variance = sum2 / count;//计算方差
+            //再次循环窗口内每个像元
+            double A = 0, T = 0, M = 0, sum3 = 0, sum4 = 0;
+            for (int x = -kernalx; x <= kernalx; x++)
+            {
+                for (int y = -kernaly; y <= kernaly; y++)
+                {
+                    A = variance / (mean * mean);//计算A
+                    T = sqrt(x * x + y * y);//计算T
+                    M = exp(-A * T);//计算M
+                    sum3 += (int)imgArray[(i + y) * width + j + x] * M;
+                    sum4 += M;
+                }
+            }
+            //灰度赋值
+            double g = sum3 / sum4;//计算灰度值
+            if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
+            filterArray[i * width + j] = (int)g;//赋值给窗口中心
+        }
+    }
+    //存成tif影像
+    //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-Frost.tif", width, height, 1, GDT_Byte, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "Filtered-输出路径创建失败" << endl;
+        return filterArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "filter写入失败" << endl;
+    }
+}
+vector<unsigned char> AdFrostFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
+{
+    int look = 1; //视数
+    GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    vector<unsigned char> imgArray(width * height);//输入影像
+    vector<unsigned char> filterArray(width * height);//输出影像
+    vector<unsigned char> window(kernalx * kernaly); //滤波窗口
+    CPLErr eErr = poBand->RasterIO(GF_Read, 0, 0, width, height, imgArray.data(), width, height, datatype, 0, 0);//读入影像
+    kernalx = (kernalx - 1) / 2; //窗口大小
+    kernaly = (kernaly - 1) / 2; //窗口大小
+    // 影像边缘做处理
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
+                filterArray[i * width + j] = imgArray[i * width + j];
+    //四重循环，循环影像XY和窗口XY
+    for (int i = kernaly + 1; i < height - 1 - kernaly; i++)
+    {
+        for (int j = kernalx + 1; j < width - 1 - kernalx; j++)
+        {
+            //循环窗口内每个像元
+            int count = 0;
+            for (int x = -kernalx; x <= kernalx; x++)
+            {
+                for (int y = -kernaly; y <= kernaly; y++)
+                {
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    count++;
+                }
+            }
+            //计算有关系数
+            double sum = 0; 
+            for (int i = 0; i < count; i++) 
+                sum += window[i];
+            double mean = sum / count;//计算均值
+            double sum2 = 0; 
+            for (int i = 0; i < count; i++) 
+                sum2 += (window[i] - mean) * (window[i] - mean);
+            double variance = sum2 / count;//计算方差
+            double C_u = 1 / sqrt(look);//计算C_u
+            double C_I = sqrt(variance) / mean;//计算C_I
+            double C_max = sqrt(1 + 2 / look);//计算C_max
+            //阈值判断
+            double g = 0;
+            if (C_I < C_u) g = mean;
+            else if (C_I >= C_u && C_I <= C_max)
+            {
+                //再次循环窗口内每个像元
+                double A = 0, T = 0, M = 0, sum3 = 0, sum4 = 0;
+                for (int x = -kernalx; x <= kernalx; x++)
+                {
+                    for (int y = -kernaly; y <= kernaly; y++)
+                    {
+                        A = variance / (mean * mean);//计算A
+                        T = sqrt(x * x + y * y);//计算T
+                        M = exp(-A * T);//计算M
+                        sum3 += (int)imgArray[(i + y) * width + j + x] * M;
+                        sum4 += M;
+                    }
+                }
+                g = sum3 / sum4;
+            }
+            else g = window[(count + 1) / 2 - 1];
+            //灰度赋值
+            if (g > 255) 
+                g = 255; 
+            if (g < 0) 
+                g = 0;//去除异常值
+            filterArray[i * width + j] = (int)g;//赋值给窗口中心
+        }
+    }
+    //存成tif影像
+    //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
+    GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
+    char** papszOptions = pDriver->GetMetadata();
+    GDALDataset* pDatasetSave = pDriver->Create("data/Filter-AdFrost.tif", width, height, 1, GDT_Byte, papszOptions);
+    if (pDatasetSave == NULL) {
+        cout << "Filtered-输出路径创建失败" << endl;
+        return filterArray;
+    }
+    //将图像数据写入到新的数据集中
+    if (pDatasetSave->RasterIO(GF_Write, 0, 0, width, height, filterArray.data(), width, height, GDT_Byte, 1, NULL, 0, 0, 0) != CE_None) {
+        cout << "filter写入失败" << endl;
+    }
+}
 
