@@ -44,10 +44,9 @@ int main()
     GDALDataset* pDatasetRead{};
     GDALDataset* pDatasetSave;
     GDALDriver* pDriver;
+    // 影像预处理
     //char filename[200] = "data/imagery_HH.tif";
-
-    //// 影像预处理
-    //char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
+    ////char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
     //pDatasetRead = Read_image(pDatasetRead, filename); //读取COSAR影像
     //if (pDatasetRead == NULL) {
     //    return 1;
@@ -62,19 +61,20 @@ int main()
     //vector<float> dbArray = to_dB(qdArray, width, height);    // 计算分贝
     //vector<float> vArray = visible(dbArray, width, height); // 线性变换至0-255区间
     //int ground_look = 3; //距离向视数
-    //int azimuth_look = 2; //方位向视数
+    //int azimuth_look = 3; //方位向视数
     //vector<float> mvArray = multi_view(qdArray, width, height, ground_look, azimuth_look); //多视处理
 
     // 由于原始影像太大，使用ENVI软件裁剪多视结果，对裁剪后的影像进行滤波处理
-    char filename0[200] = "data/zhibei.tif"; // 待处理影像
+    char filename0[200] = "data/r2.tif"; // 待处理影像
+    //char filename0[200] = "data/zhibei.tif"; // 待处理影像
     pDatasetRead = Read_image(pDatasetRead, filename0); //读取影像
-    //vector<unsigned char> Filter_img_mean = meanFilter(pDatasetRead, 7, 5);//均值滤波
-    //vector<unsigned char> Filter_img_Lee = LeeFilter(pDatasetRead, 7, 5);//Lee滤波
-    //vector<unsigned char> Filter_img_AdLee = Ad_LeeFilter(pDatasetRead, 7, 5);//增强Lee滤波
-    //vector<unsigned char> Filter_img_Kuan = KuanFilter(pDatasetRead, 7, 5);//Kuan滤波
-    //vector<unsigned char> Filter_img_Kuan = AdKuanFilter(pDatasetRead, 7, 5);//Kuan滤波
-    //vector<unsigned char> Filter_img_Frost = FrostFilter(pDatasetRead, 7, 5);//Frost滤波
-    vector<unsigned char> Filter_img_Frost = AdFrostFilter(pDatasetRead, 5, 5);//Frost滤波
+    vector<unsigned char> Filter_img_mean = meanFilter(pDatasetRead, 3, 3);//均值滤波
+    vector<unsigned char> Filter_img_Lee = LeeFilter(pDatasetRead, 3, 3);//Lee滤波
+    vector<unsigned char> Filter_img_AdLee = Ad_LeeFilter(pDatasetRead, 3, 3);//增强Lee滤波
+    vector<unsigned char> Filter_img_Kuan = KuanFilter(pDatasetRead, 3, 3);//Kuan滤波
+    vector<unsigned char> Filter_img_AdKuan = AdKuanFilter(pDatasetRead, 3, 3);//Kuan滤波
+    vector<unsigned char> Filter_img_Frost = FrostFilter(pDatasetRead, 3, 3);//Frost滤波
+    vector<unsigned char> Filter_img_AdFrost = AdFrostFilter(pDatasetRead, 3, 3);//Frost滤波
 
 
     
@@ -163,7 +163,7 @@ vector<float> intensity(GDALDataset* pDatasetRead) {
         nBands = pDatasetRead->GetRasterCount();
         //获取波段
         GDALRasterBand* poBand1 = pDatasetRead->GetRasterBand(1); // 获取第一个波段
-        GDALRasterBand* poBand2 = pDatasetRead->GetRasterBand(2); // 获取第一个波段
+        GDALRasterBand* poBand2 = pDatasetRead->GetRasterBand(2); // 获取第二个波段
         vector<short> realArray(lWidth * lHeight);
         vector<short> imgArray(lWidth * lHeight);
         vector<int> tmpArray(lWidth * lHeight);
@@ -187,11 +187,6 @@ vector<float> intensity(GDALDataset* pDatasetRead) {
             GDALClose(pDatasetRead);
             return err;
         }
-        // 将原影像的投影信息和地理变换参数复制到新影像
-        pDatasetSave->SetProjection(pDatasetRead->GetProjectionRef());
-        double adfGeoTransform[6];
-        pDatasetRead->GetGeoTransform(adfGeoTransform);
-        pDatasetSave->SetGeoTransform(adfGeoTransform);
         //将图像数据写入到新的数据集中
         if (pDatasetSave->RasterIO(GF_Write, 0, 0, lWidth, lHeight, qdArray.data(), lWidth, lHeight, GDT_Float32, 1, NULL, 0, 0, 0) != CE_None) {
             cout << "tif写入失败" << endl;
@@ -255,7 +250,7 @@ vector<float> multi_view(vector<float> visible, int width, int height, int groun
     int mv_width = width / ground_look;
     int mv_height = height / azimuth_look;
     vector<float> mvArray(mv_width * mv_height);
-    vector<float> mvArray_w(mv_width * height);//距离向抽稀半成品
+    vector<float> mvArray_w(mv_width * height);
 
     //距离向抽稀
     for(int i =0;i<height;i++){
@@ -306,7 +301,9 @@ vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernalx, int ker
     // 影像边缘不做处理
     for (int i = 0; i < height; i++)
         for (int j = 0; j < width; j++)
-            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || (i <= height - 1 && i >= height - 1 - kernaly) || (j <= width - 1 && j >= width - 1 - kernalx))
+            if ((i >= 0 && i <= kernaly) || (j >= 0 && j <= kernalx) || 
+                (i <= height - 1 && i >= height - 1 - kernaly) || 
+                (j <= width - 1 && j >= width - 1 - kernalx))
                 filterArray[i * width + j] = qdArray[i * width + j];
     // 初始化临时数组
     int num = kernalx * kernaly; 
@@ -331,6 +328,7 @@ vector<unsigned char> meanFilter(GDALDataset* pDatasetRead, int kernalx, int ker
             filterArray[m] = (unsigned char)ave;
         }
     }
+    delete[] temp; // 释放临时数组内存
     //存成tif影像
    //获取一个GTIFF格式的驱动程序，创建一个新的GTIFF格式的数据集
     GDALDriver* pDriver = GetGDALDriverManager()->GetDriverByName("GTIFF");
@@ -361,7 +359,9 @@ vector<unsigned char> LeeFilter(GDALDataset* pDatasetRead, int kernalx, int kern
     // 影像边缘做处理
     for (int i = 0; i < height; i++)
         for (int j = 0; j < width; j++)
-            if ((i >= 0 && i <= kernaly0) || (j >= 0 && j <= kernalx0) || (i <= height - 1 && i >= height - 1 - kernaly0) || (j <= width - 1 && j >= width - 1 - kernalx0))
+            if ((i >= 0 && i <= kernaly0) || (j >= 0 && j <= kernalx0) ||
+                (i <= height - 1 && i >= height - 1 - kernaly0) ||
+                (j <= width - 1 && j >= width - 1 - kernalx0))
                 filterArray[i * width + j] = imgArray[i * width + j];
     //四重循环，循环影像XY和窗口XY
     for (int i = kernaly0 + 1; i < height - 1 - kernaly0; i++)
@@ -389,7 +389,7 @@ vector<unsigned char> LeeFilter(GDALDataset* pDatasetRead, int kernalx, int kern
             double C_I = sqrt(SS) / mean;//计算C_I
             double w = 1 - (C_u * C_u) / (C_I * C_I);//计算w
             //灰度赋值
-            double g = mean * w + imgArray[i * width + j] * (1 - w);//计算灰度值
+            double g = imgArray[i * width + j] * w + mean * (1 - w);//计算灰度值
             if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
             filterArray[i * width + j] = (int)g;//赋值给窗口中心
         }
@@ -453,7 +453,7 @@ vector<unsigned char> Ad_LeeFilter(GDALDataset* pDatasetRead, int kernalx, int k
             //阈值判断
             double g = 0;
             if (C_I < C_u) g = mean;
-            else if (C_I >= C_u && C_I <= C_max) g = mean * w + window[(count + 1) / 2 - 1] * (1 - w);
+            else if (C_I >= C_u && C_I <= C_max) g = window[(count + 1) / 2 - 1] * w + mean * (1 - w);
             else g = window[(count + 1) / 2 - 1];
             //灰度赋值
             if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
@@ -518,7 +518,7 @@ vector<unsigned char> KuanFilter(GDALDataset* pDatasetRead, int kernalx, int ker
             double C_I = sqrt(variance) / mean;//计算C_I
             double w = (1 - (C_u * C_u) / (C_I * C_I)) / (1 + C_u * C_u);//计算w
             //灰度赋值
-            double g = mean * w + window[(count + 1) / 2 - 1] * (1 - w);//计算灰度值
+            double g = window[(count + 1) / 2 - 1] * w + mean * (1 - w);//计算灰度值
             if (g > 255) g = 255; if (g < 0) g = 0;//去除异常值
             filterArray[i * width + j] = (int)g;//赋值给窗口中心
             //int m = i * width + j;
@@ -544,7 +544,7 @@ vector<unsigned char> KuanFilter(GDALDataset* pDatasetRead, int kernalx, int ker
 }
 vector<unsigned char> AdKuanFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
 {
-    int look = 1; //视数
+    int look = 3; //视数
     GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
     int width = pDatasetRead->GetRasterXSize();
     int height = pDatasetRead->GetRasterYSize();
@@ -571,7 +571,7 @@ vector<unsigned char> AdKuanFilter(GDALDataset* pDatasetRead, int kernalx, int k
             {
                 for (int y = -kernaly; y <= kernaly; y++)
                 {
-                    window[count] = ((int)imgArray[(i + y) * width + j + x]);//取出窗口内每个像元
+                    window[count] = ((int)imgArray[(i + y) * width + j + x]);
                     count++;
                 }
             }
@@ -589,7 +589,7 @@ vector<unsigned char> AdKuanFilter(GDALDataset* pDatasetRead, int kernalx, int k
             if (C_I < C_u) 
                 g = mean;
             else if (C_I >= C_u && C_I <= C_max) 
-                g = mean * w + window[(count + 1) / 2 - 1] * (1 - w);
+                g = window[(count + 1) / 2 - 1] * w + mean * (1 - w);
             else 
                 g = window[(count + 1) / 2 - 1];
             //灰度赋值
@@ -615,7 +615,7 @@ vector<unsigned char> AdKuanFilter(GDALDataset* pDatasetRead, int kernalx, int k
 }
 vector<unsigned char> FrostFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
 {
-    int look = 1; //视数
+    int look = 3; //视数
     GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
     int width = pDatasetRead->GetRasterXSize();
     int height = pDatasetRead->GetRasterYSize();
@@ -686,7 +686,7 @@ vector<unsigned char> FrostFilter(GDALDataset* pDatasetRead, int kernalx, int ke
 }
 vector<unsigned char> AdFrostFilter(GDALDataset* pDatasetRead, int kernalx, int kernaly)
 {
-    int look = 1; //视数
+    int look = 3; //视数
     GDALRasterBand* poBand = pDatasetRead->GetRasterBand(1); // 获取第一个波段
     int width = pDatasetRead->GetRasterXSize();
     int height = pDatasetRead->GetRasterYSize();
