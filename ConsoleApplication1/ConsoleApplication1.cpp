@@ -1,6 +1,6 @@
 ﻿
 
-// GDALtest.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
+// 由于影像数据过大，data文件夹中并没有原始影像数据，如需运行本代码需要将原始影像数据放入data文件夹中，由于滤波区域较小，保留在data文件夹下
 //
 
 #include <iostream>
@@ -45,24 +45,25 @@ int main()
     GDALDataset* pDatasetSave;
     GDALDriver* pDriver;
     // 影像预处理
-    //char filename[200] = "data/imagery_HH.tif";
-    ////char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
-    //pDatasetRead = Read_image(pDatasetRead, filename); //读取COSAR影像
-    //if (pDatasetRead == NULL) {
-    //    return 1;
-    //}
-    //GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
-    //int width = pDatasetRead->GetRasterXSize();
-    //int height = pDatasetRead->GetRasterYSize();
-    //vector<float> qdArray = intensity(pDatasetRead);// 计算强度图
-    //if (qdArray.size()==0) {
-    //    return 1;
-    //}
-    //vector<float> dbArray = to_dB(qdArray, width, height);    // 计算分贝
-    //vector<float> vArray = visible(dbArray, width, height); // 线性变换至0-255区间
-    //int ground_look = 3; //距离向视数
-    //int azimuth_look = 3; //方位向视数
-    //vector<float> mvArray = multi_view(qdArray, width, height, ground_look, azimuth_look); //多视处理
+    // 由于影像数据过大，data文件夹中并没有原始影像数据，如需运行本代码需要将原始影像数据放入data文件夹中，由于滤波区域较小，保留在data文件夹下
+    char filename[200] = "data/imagery_HH.tif";
+    //char filename[200] = "data/IMAGE_HH_SRA_strip_007.cos";
+    pDatasetRead = Read_image(pDatasetRead, filename); //读取COSAR影像
+    if (pDatasetRead == NULL) {
+        return 1;
+    }
+    GDALDataType datatype = pDatasetRead->GetRasterBand(1)->GetRasterDataType();
+    int width = pDatasetRead->GetRasterXSize();
+    int height = pDatasetRead->GetRasterYSize();
+    vector<float> qdArray = intensity(pDatasetRead);// 计算强度图
+    if (qdArray.size()==0) {
+        return 1;
+    }
+    vector<float> dbArray = to_dB(qdArray, width, height);    // 计算分贝
+    vector<float> vArray = visible(dbArray, width, height); // 线性变换至0-255区间
+    int ground_look = 3; //距离向视数
+    int azimuth_look = 3; //方位向视数
+    vector<float> mvArray = multi_view(qdArray, width, height, ground_look, azimuth_look); //多视处理
 
     // 由于原始影像太大，使用ENVI软件裁剪多视结果，对裁剪后的影像进行滤波处理
     char filename0[200] = "data/r2.tif"; // 待处理影像
