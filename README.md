@@ -1,5 +1,5 @@
 # 实习一：影像预处理
-武大遥感院微波遥感实习
+微波遥感实习。由于影像太大，并未上传。代码仅供参考。
 ## 1. RADARSAT-2（tif影像）和TerraSAR-X（COSAR影像）原始影像读取并转强度图
 使用GDAL库读取tif和cos影像，安装方法参考[链接](https://cloud.tencent.com/developer/ask/sof/100566283)
 
